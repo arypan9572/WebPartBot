@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WebPartBot</title>
+<style>
+@font-face { font-family: 'SFPro'; src: url('SF-Pro.ttf'); }
+body { background: black; color: white; margin: 0; padding: 0; font-family: 'SFPro', sans-serif; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; overflow: hidden; }
+.title { font-size: 64px; font-weight: 600; font-style: italic; position: relative; animation: fadeInUp 2.5s ease-out forwards, floatUpDown 4s ease-in-out infinite alternate; }
+.subtitle { font-size: 16px; font-weight: 300; margin-top: 10px; position: relative; animation: fadeInUp 3.2s ease-out forwards, floatUpDown 6s ease-in-out infinite alternate; }
+@keyframes fadeInUp { 0% { opacity:0; transform: translateY(40px); } 70% { opacity:1; transform: translateY(6px); } 100% { opacity:1; transform: translateY(0); } }
+@keyframes floatUpDown { 0% { transform: translateY(0px); } 50% { transform: translateY(-8px); } 100% { transform: translateY(0px); } }
+.ambient { position: absolute; top: 50%; left: 50%; width: 350px; height: 350px; transform: translate(-50%, -50%); border-radius: 50%; background: conic-gradient(red, orange, yellow, green, cyan, blue, violet, red); filter: blur(80px) brightness(0.7) saturate(1.4); animation: spin 10s linear infinite, phase 6s ease-in-out infinite alternate; pointer-events: auto; z-index: 1; cursor: pointer; }
+@keyframes spin { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+@keyframes phase { 0% { filter: blur(80px) brightness(0.7) saturate(1.2); } 100% { filter: blur(110px) brightness(1) saturate(1.7); } }
+.trail { position: fixed; width: 22px; height: 22px; border-radius: 50%; pointer-events: none; opacity: 0.8; filter: blur(8px); z-index: 999; transition: transform 0.15s ease-out; }
+</style>
+</head>
+<body>
+<div class="title">WebPartBot</div>
+<div class="subtitle">Click the button in the bottom right to talk to it</div>
+<div class="ambient" id="ball"></div>
+
+<script>
+// Reset Chatbase conversation
+Object.keys(localStorage).forEach(key => { if(key.startsWith("chatbase")) localStorage.removeItem(key); });
+Object.keys(sessionStorage).forEach(key => { if(key.startsWith("chatbase")) sessionStorage.removeItem(key); });
+(function(){if(!window.chatbase||window.chatbase("getState")!="initialized"){window.chatbase=(...args)=>{if(!window.chatbase.q){window.chatbase.q=[]}window.chatbase.q.push(args)};window.chatbase=new Proxy(window.chatbase,{get(t,p){if(p==="q")return t.q; return (...a)=>t(p,...a)}})}; const onLoad=function(){const s=document.createElement("script");s.src="https://www.chatbase.co/embed.min.js";s.id="LoNBrbJzfsSmxFJ9Doebt";s.domain="www.chatbase.co";document.body.appendChild(s)}; if(document.readyState==="complete"){onLoad()}else{window.addEventListener("load",onLoad)}})();
+</script>
+
+<script>
+// Rainbow mouse trail
+const colors=["#ff0000","#ff7f00","#ffff00","#00ff00","#00ffff","#0000ff","#8b00ff"];
+let colorIndex=0,lastX=0,lastY=0,firstMove=true;
+window.addEventListener("mousemove", e=>{
+  const x=e.pageX,y=e.pageY;
+  if(firstMove){lastX=x;lastY=y;firstMove=false;}
+  const segment=document.createElement("div");
+  segment.className="trail";
+  segment.style.background=colors[colorIndex];
+  colorIndex=(colorIndex+1)%colors.length;
+  const dx=x-lastX,dy=y-lastY,dist=Math.hypot(dx,dy),angle=Math.atan2(dy,dx)*180/Math.PI;
+  segment.style.width=dist+"px";
+  segment.style.height="22px";
+  segment.style.left=lastX+"px";
+  segment.style.top=lastY+"px";
+  segment.style.transform=`rotate(${angle}deg)`;
+  segment.style.borderRadius="14px";
+  segment.style.opacity=0.85;
+  segment.style.filter="blur(14px)";
+  segment.style.position="fixed";
+  segment.style.transition="opacity 1.4s ease-out";
+  document.body.appendChild(segment);
+  requestAnimationFrame(()=>segment.style.opacity=0);
+  setTimeout(()=>segment.remove(),1500);
+  lastX=x; lastY=y;
+});
+
+// Ball physics with normal behavior and reset after 10s
+const ball=document.getElementById("ball");
+let vx=0,vy=0,gravity=0.3,bounce=-0.7,isClicked=false,returnTimeout=null,maxSpeed=7;
+
+function physicsLoop(){
+  const rect=ball.getBoundingClientRect();
+  let top=parseFloat(rect.top),left=parseFloat(rect.left),width=rect.width,height=rect.height;
+  if(isClicked){
+    vy+=gravity;
+    top+=vy;
+    left+=vx;
+
+    // bounce off edges considering ball edges
+    if(top<=0){top=0; vy*=-bounce;}
+    if(top+height>=window.innerHeight){top=window.innerHeight-height; vy*=-bounce;}
+    if(left<=0){left=0; vx*=-bounce;}
+    if(left+width>=window.innerWidth){left=window.innerWidth-width; vx*=-bounce;}
+
+    // limit speed
+    vx=Math.max(Math.min(vx,maxSpeed),-maxSpeed);
+    vy=Math.max(Math.min(vy,maxSpeed),-maxSpeed);
+
+    ball.style.top=top+'px';
+    ball.style.left=left+'px';
+  }
+  requestAnimationFrame(physicsLoop);
+}
+physicsLoop();
+
+function smoothReturn(){
+  const rect=ball.getBoundingClientRect();
+  const startX=rect.left,startY=rect.top,endX=(window.innerWidth-rect.width)/2,endY=(window.innerHeight-rect.height)/2;
+  const duration=3000,startTime=performance.now();
+  function animate(t){
+    const progress=Math.min((t-startTime)/duration,1);
+    const eased=1-Math.pow(1-progress,3);
+    ball.style.top=startY+(endY-startY)*eased+'px';
+    ball.style.left=startX+(endX-startX)*eased+'px';
+    if(progress<1)requestAnimationFrame(animate); else isClicked=false;
+  }
+  requestAnimationFrame(animate);
+}
+
+ball.addEventListener('click',e=>{
+  isClicked=true;
+  const rect=ball.getBoundingClientRect();
+  const centerX=rect.left+rect.width/2;
+  const centerY=rect.top+rect.height/2;
+
+  // Determine opposite direction vector from click relative to ball center
+  vx=(centerX - e.clientX)*0.1;
+  vy=(centerY - e.clientY)*0.1;
+
+  if(returnTimeout) clearTimeout(returnTimeout);
+  returnTimeout=setTimeout(smoothReturn,10000);
+});
+</script>
+</body>
+</html>
